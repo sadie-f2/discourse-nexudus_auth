@@ -1,0 +1,5 @@
+plugins:
+  nexudus_auth_enabled:
+    default: true
+    type: bool
+    client: true
