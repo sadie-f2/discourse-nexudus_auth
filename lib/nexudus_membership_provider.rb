@@ -26,7 +26,7 @@ class NexudusMembershipProvider
     out[:base_url]         = BASE_URL
 
     begin
-      r = api_get(CONTRACTS_PATH, CoworkerContract_Active: 'true')
+      r = api_get(CONTRACTS_PATH, 'CoworkerContract_Active' => 'true', 'size' => '1000')
       out[:contracts_status] = r.code
       begin
         data    = JSON.parse(r.body)
@@ -54,7 +54,7 @@ class NexudusMembershipProvider
   private
 
   def self.fetch_member(email)
-    r = api_get(CONTRACTS_PATH, CoworkerContract_Active: 'true')
+    r = api_get(CONTRACTS_PATH, 'CoworkerContract_Active' => 'true', 'size' => '1000')
     return nil unless r.code == '200'
     records = JSON.parse(r.body)['Records'] || []
     match = records.find { |rec| rec['CoworkerEmail'].to_s.downcase == email.downcase }
@@ -77,15 +77,19 @@ class NexudusMembershipProvider
   end
   private_class_method :auth_header
 
-  def self.api_get(path, params = {})
-    uri = URI("#{BASE_URL}/#{path.to_s.lstrip('/')}")
-    uri.query = URI.encode_www_form(params) unless params.empty?
-    Net::HTTP.start(uri.host, uri.port, use_ssl: true, read_timeout: TIMEOUT) do |http|
-      req = Net::HTTP::Get.new(uri)
-      auth_header.each { |k, v| req[k] = v }
-      req['Accept'] = 'application/json'
-      http.request(req)
-    end
+  def self.api_get(path, params = nil)
+    uri = URI.parse("#{BASE_URL}/#{path.to_s.delete_prefix('/')}")
+    uri.query = URI.encode_www_form(params) if params && !params.empty?
+
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl      = true
+    http.read_timeout = TIMEOUT
+
+    req = Net::HTTP::Get.new(uri.request_uri)
+    auth_header.each { |k, v| req[k] = v }
+    req['Accept'] = 'application/json'
+
+    http.request(req)
   end
   private_class_method :api_get
 end
