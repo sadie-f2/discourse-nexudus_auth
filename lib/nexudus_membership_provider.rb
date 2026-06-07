@@ -1,7 +1,8 @@
 # frozen_string_literal: true
-require 'net/http'
+require 'open3'
 require 'base64'
 require 'json'
+require 'uri'
 
 class NexudusMembershipProvider
   BASE_URL       = ENV.fetch('NEXUDUS_BASE_URL', 'https://spaces.nexudus.com/api').freeze
@@ -67,30 +68,36 @@ class NexudusMembershipProvider
   end
   private_class_method :fetch_member
 
-  def self.auth_header
-    token = ENV['NEXUDUS_BOOKING_TOKEN'].to_s.strip
-    unless token.empty?
-      return { 'Authorization' => "Bearer #{token}" }
-    end
-    encoded = Base64.strict_encode64("#{ENV['NEXUDUS_EMAIL']}:#{ENV['NEXUDUS_PASSWORD']}")
-    { 'Authorization' => "Basic #{encoded}" }
-  end
-  private_class_method :auth_header
-
+  # Shell out to curl — Ruby's TLS fingerprint is blocked by CloudFront WAF,
+  # curl's libssl is not.
   def self.api_get(path, params = nil)
     uri = URI.parse("#{BASE_URL}/#{path.to_s.delete_prefix('/')}")
     uri.query = URI.encode_www_form(params) if params && !params.empty?
 
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl      = true
-    http.read_timeout = TIMEOUT
+    stdout, _stderr, _status = Open3.capture3(
+      'curl', '-s',
+      '--max-time', TIMEOUT.to_s,
+      '-w', "\n%{http_code}",
+      *curl_auth_args,
+      '-H', 'Accept: application/json',
+      uri.to_s
+    )
 
-    req = Net::HTTP::Get.new(uri.request_uri)
-    auth_header.each { |k, v| req[k] = v }
-    req['Accept']     = 'application/json'
-    req['User-Agent'] = 'Mozilla/5.0 (compatible; discourse-nexudus-auth)'
-
-    http.request(req)
+    # curl -w appends the status code on a new line after the body
+    *body_lines, code = stdout.lines
+    Response.new(code.to_s.strip, body_lines.join)
   end
   private_class_method :api_get
+
+  def self.curl_auth_args
+    token = ENV['NEXUDUS_BOOKING_TOKEN'].to_s.strip
+    if token.empty?
+      ['-u', "#{ENV['NEXUDUS_EMAIL']}:#{ENV['NEXUDUS_PASSWORD']}"]
+    else
+      ['-H', "Authorization: Bearer #{token}"]
+    end
+  end
+  private_class_method :curl_auth_args
+
+  Response = Struct.new(:code, :body)
 end
