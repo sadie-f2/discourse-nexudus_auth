@@ -87,7 +87,8 @@ class NexudusMembershipProvider
 
     req = Net::HTTP::Get.new(uri.request_uri)
     auth_header.each { |k, v| req[k] = v }
-    req['Accept'] = 'application/json'
+    req['Accept']     = 'application/json'
+    req['User-Agent'] = 'Mozilla/5.0 (compatible; discourse-nexudus-auth)'
 
     http.request(req)
   end
