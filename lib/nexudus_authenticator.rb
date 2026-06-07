@@ -16,10 +16,9 @@ module OmniAuth
       end
 
       def callback_phase
-        email    = request.params['email'].to_s.strip.downcase
-        password = request.params['password'].to_s
+        email = request.params['email'].to_s.strip.downcase
 
-        diag   = ::NexudusMembershipProvider.diagnose(email, password)
+        diag   = ::NexudusMembershipProvider.diagnose(email)
         member = diag.delete(:member)
 
         unless member
