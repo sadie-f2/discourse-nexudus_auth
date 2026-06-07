@@ -18,6 +18,43 @@ class NexudusMembershipProvider
     nil
   end
 
+  # Diagnostic version: makes both API calls, captures every detail.
+  # Returns a hash with :member (nil on failure) plus :ping_* and :contracts_* keys.
+  def self.diagnose(email, password)
+    out = {}
+
+    begin
+      r = get(PING_PATH, email, password)
+      out[:ping_status] = r.code
+      out[:ping_body]   = r.body.to_s[0, 300]
+    rescue => e
+      out[:ping_error] = "#{e.class}: #{e.message}"
+    end
+
+    begin
+      r = get("#{CONTRACTS_PATH}?CoworkerContract_Active=true", email, password)
+      out[:contracts_status] = r.code
+      begin
+        data = JSON.parse(r.body)
+        out[:contracts_total_items]  = data['TotalItems'].to_s
+        out[:contracts_record_count] = (data['Records'] || []).length.to_s
+        out[:contracts_first_email]  = data.dig('Records', 0, 'CoworkerEmail').to_s
+        out[:contracts_first_name]   = data.dig('Records', 0, 'CoworkerFullName').to_s
+        rec = data['Records']&.first
+        out[:member] = rec ? { email: rec['CoworkerEmail'] || email,
+                                name:  rec['CoworkerFullName'] || email.split('@').first,
+                                nexudus_id: rec['CoworkerId'].to_s } : nil
+      rescue => e
+        out[:contracts_parse_error] = "#{e.class}: #{e.message}"
+        out[:contracts_raw_body]    = r.body.to_s[0, 300]
+      end
+    rescue => e
+      out[:contracts_error] = "#{e.class}: #{e.message}"
+    end
+
+    out
+  end
+
   def self.ping_ok?(email, password)
     get(PING_PATH, email, password).code == '200'
   end

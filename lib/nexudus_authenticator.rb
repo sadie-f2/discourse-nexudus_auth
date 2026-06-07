@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 require 'omniauth'
+require 'cgi'
 
 module OmniAuth
   module Strategies
@@ -18,8 +19,13 @@ module OmniAuth
         email    = request.params['email'].to_s.strip.downcase
         password = request.params['password'].to_s
 
-        member = ::NexudusMembershipProvider.verify_and_fetch(email, password)
-        return fail!(:invalid_credentials) if member.nil?
+        diag   = ::NexudusMembershipProvider.diagnose(email, password)
+        member = diag.delete(:member)
+
+        unless member
+          return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
+                  [diag_html(email, diag)]]
+        end
 
         env['omniauth.auth'] = OmniAuth::AuthHash.new(
           provider: name,
@@ -31,6 +37,27 @@ module OmniAuth
           extra: { nexudus_id: member[:nexudus_id] }
         )
         call_app!
+      end
+
+      private
+
+      def diag_html(email, diag)
+        rows = diag.map do |k, v|
+          "<tr><td style='padding:6px 12px;border:1px solid #ccc'>#{k}</td>" \
+          "<td style='padding:6px 12px;border:1px solid #ccc'><code>#{CGI.escapeHTML(v.to_s)}</code></td></tr>"
+        end.join
+        <<~HTML
+          <!DOCTYPE html><html><head><title>Nexudus Auth Diagnostics</title>
+          <style>body{font-family:monospace;padding:2em;max-width:800px}
+          table{border-collapse:collapse;width:100%}
+          tr:nth-child(even){background:#f5f5f5}</style></head>
+          <body>
+          <h2>Nexudus Auth — diagnostic output</h2>
+          <p><strong>Email:</strong> #{CGI.escapeHTML(email)}</p>
+          <table>#{rows}</table>
+          <p><a href="/auth/nexudus">&#8592; Try again</a></p>
+          </body></html>
+        HTML
       end
     end
   end
