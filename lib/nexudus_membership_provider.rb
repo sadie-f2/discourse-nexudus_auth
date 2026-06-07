@@ -4,18 +4,24 @@ require 'json'
 
 class NexudusMembershipProvider
   BASE_URL       = 'https://spaces.nexudus.com/api'
+  PING_PATH      = '/helpers/ping'
   CONTRACTS_PATH = '/billing/coworkercontracts'
   TIMEOUT        = 10
 
-  # Returns { email:, name:, nexudus_id: } on success, nil on bad/inactive credentials.
-  # Uses coworkercontracts as both the credential check and member data source:
-  # 401 = bad credentials, 200 + empty records = no active membership.
+  # Returns { email:, name:, nexudus_id: } on success, nil on bad credentials
+  # or network error.
   def self.verify_and_fetch(email, password)
+    return nil unless ping_ok?(email, password)
     fetch_member(email, password)
   rescue => e
     Rails.logger.error("[NexudusAuth] #{e.class}: #{e.message}")
     nil
   end
+
+  def self.ping_ok?(email, password)
+    get(PING_PATH, email, password).code == '200'
+  end
+  private_class_method :ping_ok?
 
   def self.fetch_member(email, password)
     resp = get("#{CONTRACTS_PATH}?CoworkerContract_Active=true", email, password)
