@@ -82,15 +82,24 @@ class NexudusAuthenticator < Auth::Authenticator
   end
 
   def after_authenticate(auth_token, existing_account: nil)
-    result            = Auth::Result.new
-    info              = auth_token.info
-    result.email      = info[:email]
-    result.name       = info[:name]
+    result             = Auth::Result.new
+    info               = auth_token.info
+    result.email       = info[:email]
     result.email_valid = true
 
-    account      = UserAssociatedAccount.find_by(provider_name: name,
-                                                  provider_uid:  auth_token.uid)
-    result.user  = account&.user
+    # Check for existing Nexudus association
+    account     = UserAssociatedAccount.find_by(provider_name: name,
+                                                provider_uid:  auth_token.uid)
+    result.user = account&.user
+
+    # Nexudus membership confirmation is sufficient — auto-merge by email
+    # without requiring a second Discourse login. Existing username, display
+    # name, and privileges are untouched.
+    result.user ||= User.find_by_email(info[:email])
+
+    # Only suggest Nexudus name when creating a brand-new account
+    result.name = info[:name] if result.user.nil?
+
     result
   end
 
