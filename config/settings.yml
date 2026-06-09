@@ -3,3 +3,6 @@ plugins:
     default: true
     type: bool
     client: true
+  nexudus_auth_group:
+    default: "makerspace-members"
+    type: string

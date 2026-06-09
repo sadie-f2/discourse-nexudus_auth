@@ -63,8 +63,6 @@ module OmniAuth
 end
 
 class NexudusAuthenticator < Auth::Authenticator
-  GROUP_NAME = 'makerspace-members'
-
   def name
     'nexudus'
   end
@@ -120,9 +118,10 @@ class NexudusAuthenticator < Auth::Authenticator
   private
 
   def add_to_nexudus_group(user)
-    group = Group.find_by(name: GROUP_NAME)
+    group_name = SiteSetting.nexudus_auth_group.to_s.strip
+    group = Group.find_by(name: group_name)
     unless group
-      Rails.logger.warn("[NexudusAuth] Group '#{GROUP_NAME}' not found — create it in Discourse admin")
+      Rails.logger.warn("[NexudusAuth] Group '#{group_name}' not found — create it in Discourse admin or update the nexudus_auth_group site setting")
       return
     end
     group.add(user) unless group.users.include?(user)
