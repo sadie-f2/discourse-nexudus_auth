@@ -100,6 +100,10 @@ class NexudusAuthenticator < Auth::Authenticator
     # Only suggest Nexudus name when creating a brand-new account
     result.name = info[:name] if result.user.nil?
 
+    # Sync group now for existing users — after_connect_existing_user is not
+    # called when result.user is set directly
+    add_to_nexudus_group(result.user) if result.user
+
     result
   end
 
