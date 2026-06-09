@@ -63,7 +63,7 @@ module OmniAuth
 end
 
 class NexudusAuthenticator < Auth::Authenticator
-  GROUP_NAME = 'nexudus-members'
+  GROUP_NAME = 'makerspace-members'
 
   def name
     'nexudus'
