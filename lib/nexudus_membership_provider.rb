@@ -9,15 +9,22 @@ class NexudusMembershipProvider
   CONTRACTS_PATH = '/billing/coworkercontracts'
   PAGE_SIZE      = 100
   TIMEOUT        = 15
+  CACHE_TTL      = 300  # seconds — refetch on miss only if cache is this old
 
-  @@cache = nil
+  @@cache     = nil
+  @@loaded_at = nil
+
+  # Warm the cache at startup so the first login doesn't pay the fetch cost.
+  def self.preload!
+    load_members! if @@cache.nil?
+  end
 
   # Returns { email:, name:, nexudus_id: } or nil.
-  # On a cache miss, refills once before giving up.
+  # On a miss, refetches once if the cache is stale — but not if we just loaded it.
   def self.find_member(email)
     load_members! if @@cache.nil?
     match = lookup(email)
-    unless match
+    if !match && cache_stale?
       load_members!
       match = lookup(email)
     end
@@ -49,6 +56,11 @@ class NexudusMembershipProvider
   end
   private_class_method :lookup
 
+  def self.cache_stale?
+    @@loaded_at.nil? || (Time.now - @@loaded_at) > CACHE_TTL
+  end
+  private_class_method :cache_stale?
+
   def self.load_members!
     records = []
     page    = 1
@@ -77,7 +89,8 @@ class NexudusMembershipProvider
       }
     end
 
-    @@cache = members
+    @@cache     = members
+    @@loaded_at = Time.now
     Rails.logger.info("[NexudusAuth] member cache loaded: #{@@cache.length} members (#{page} page(s))")
   rescue => e
     Rails.logger.error("[NexudusAuth] load_members! failed: #{e.class}: #{e.message}")
