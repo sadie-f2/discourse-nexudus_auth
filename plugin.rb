@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-# name: discourse-nexudus-auth
+# name: discourse-nexudus_auth
 # about: Authenticates Discourse users against the Nexudus coworking REST API
-# version: 0.1.9
+# version: 0.1.10
 # authors: Sadie Forbes
 # url: https://github.com/sadie-f2/discourse-nexudus_auth
 # contact_emails: sadieforbes@proton.me
 
-NEXUDUS_AUTH_VERSION  = '0.1.9'
+NEXUDUS_AUTH_VERSION  = '0.1.10'
 NEXUDUS_AUTH_GIT_HASH = `git -C #{File.dirname(__FILE__)} rev-parse --short HEAD 2>/dev/null`.strip.freeze
 
 require_relative 'lib/nexudus_membership_provider'
