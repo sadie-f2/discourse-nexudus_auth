@@ -13,19 +13,21 @@ class NexudusMembershipProvider
 
   @@cache     = nil
   @@loaded_at = nil
+  @@mutex     = Mutex.new
 
   # Warm the cache at startup so the first login doesn't pay the fetch cost.
   def self.preload!
-    load_members! if @@cache.nil?
+    return unless @@cache.nil?
+    @@mutex.synchronize { load_members! if @@cache.nil? }
   end
 
   # Returns { email:, name:, nexudus_id: } or nil.
   # On a miss, refetches once if the cache is stale — but not if we just loaded it.
   def self.find_member(email)
-    load_members! if @@cache.nil?
+    @@mutex.synchronize { load_members! if @@cache.nil? } unless @@cache
     match = lookup(email)
     if !match && cache_stale?
-      load_members!
+      @@mutex.synchronize { load_members! if cache_stale? }
       match = lookup(email)
     end
     match
