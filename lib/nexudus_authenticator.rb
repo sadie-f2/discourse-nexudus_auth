@@ -9,10 +9,7 @@ module OmniAuth
       option :name, 'nexudus'
 
       def request_phase
-        form = OmniAuth::Form.new(title: 'Log in with Nexudus', url: callback_path)
-        form.text_field('Email', 'email')
-        form.password_field('Password', 'password')
-        form.to_response
+        [200, { 'Content-Type' => 'text/html; charset=utf-8' }, [login_html]]
       end
 
       def callback_phase
@@ -47,6 +44,41 @@ module OmniAuth
       end
 
       private
+
+      def login_html
+        <<~HTML
+          <!DOCTYPE html><html><head><title>Log in with Nexudus</title>
+          <style>
+            body{font-family:sans-serif;padding:2em;max-width:400px;margin:0 auto}
+            label{display:block;margin-bottom:.25em;font-weight:bold}
+            input[type=email],input[type=password],input[type=text]{
+              width:100%;padding:.5em;margin-bottom:1em;box-sizing:border-box;
+              border:1px solid #ccc;border-radius:4px;font-size:1em}
+            .pw-wrap{position:relative}
+            .pw-wrap input{padding-right:4.5em}
+            .pw-toggle{position:absolute;right:.5em;top:50%;transform:translateY(-50%);
+              background:none;border:none;cursor:pointer;color:#555;font-size:.85em;padding:.2em .4em}
+            .pw-toggle:hover{color:#000}
+            input[type=submit]{width:100%;padding:.75em;background:#0088cc;color:#fff;
+              border:none;border-radius:4px;font-size:1em;cursor:pointer}
+            input[type=submit]:hover{background:#006699}
+          </style></head>
+          <body>
+          <h2>Log in with Nexudus</h2>
+          <form method="post" action="#{CGI.escapeHTML(callback_path)}">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" autocomplete="email" autofocus required>
+            <label for="password">Password</label>
+            <div class="pw-wrap">
+              <input type="password" id="password" name="password" autocomplete="current-password" required>
+              <button type="button" class="pw-toggle" id="pw-btn"
+                onclick="var p=document.getElementById('password');var b=document.getElementById('pw-btn');if(p.type==='password'){p.type='text';b.textContent='Hide'}else{p.type='password';b.textContent='Show'}">Show</button>
+            </div>
+            <input type="submit" value="Log in">
+          </form>
+          </body></html>
+        HTML
+      end
 
       def failure_html(message)
         <<~HTML
