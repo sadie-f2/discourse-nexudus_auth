@@ -88,7 +88,7 @@ class NexudusMembershipProvider
   private
 
   def self.lookup(email)
-    (@@cache || []).find { |m| m[:email].downcase == email.downcase }
+    (@@cache || []).find { |m| m[:email] == email.downcase }
   end
   private_class_method :lookup
 
@@ -100,13 +100,13 @@ class NexudusMembershipProvider
   def self.load_members!
     records = []
     page    = 1
+    retries = 0
     loop do
       r = api_get(CONTRACTS_PATH,
                   'CoworkerContract_Active' => 'true',
                   'size'                    => PAGE_SIZE.to_s,
                   'page'                    => page.to_s)
       if r.code == '429'
-        retries ||= 0
         if retries < 3
           retries += 1
           Rails.logger.warn("[NexudusAuth] rate limited on page #{page}, retry #{retries}/3 after 5s")
@@ -134,8 +134,10 @@ class NexudusMembershipProvider
       id = rec['CoworkerId']
       next if seen.include?(id)
       seen.add(id)
+      email = rec['CoworkerEmail'].to_s.strip.downcase
+      next if email.empty?
       members << {
-        email:      rec['CoworkerEmail'].to_s,
+        email:      email,
         name:       rec['CoworkerFullName'].to_s,
         nexudus_id: id.to_s
       }

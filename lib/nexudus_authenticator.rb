@@ -28,13 +28,9 @@ module OmniAuth
           end
         else
           member = ::NexudusMembershipProvider.find_member(email)
-          unless member
+          unless member && ::NexudusMembershipProvider.verify_password(email, password)
             return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
-                    [failure_html("No active Nexudus membership found for #{CGI.escapeHTML(email)}.")]]
-          end
-          unless ::NexudusMembershipProvider.verify_password(email, password)
-            return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
-                    [failure_html("Incorrect password.")]]
+                    [failure_html("Login failed. Check your email and password.")]]
           end
         end
 
@@ -139,6 +135,6 @@ class NexudusAuthenticator < Auth::Authenticator
       Rails.logger.warn("[NexudusAuth] Group '#{group_name}' not found — create it in Discourse admin or update the nexudus_auth_group site setting")
       return
     end
-    group.add(user) unless group.users.include?(user)
+    group.add(user) unless GroupUser.exists?(group_id: group.id, user_id: user.id)
   end
 end
