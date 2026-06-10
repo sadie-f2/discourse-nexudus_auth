@@ -9,7 +9,10 @@ module OmniAuth
       option :name, 'nexudus'
 
       def request_phase
-        [200, { 'Content-Type' => 'text/html; charset=utf-8' }, [login_html]]
+        form = OmniAuth::Form.new(title: 'Log in with Nexudus', url: callback_path)
+        form.text_field('Email', 'email')
+        form.password_field('Password', 'password')
+        form.to_response
       end
 
       def callback_phase
@@ -44,53 +47,6 @@ module OmniAuth
       end
 
       private
-
-      def login_html
-        token = request.env['rack.session']['omniauth.authenticity_token'].to_s
-        nonce = request.env['action_dispatch.content_security_policy_nonce'].to_s
-        nonce_attr = nonce.empty? ? '' : " nonce=\"#{CGI.escapeHTML(nonce)}\""
-        <<~HTML
-          <!DOCTYPE html><html><head><title>Log in with Nexudus</title>
-          <style>
-            body{font-family:sans-serif;padding:2em;max-width:400px;margin:0 auto}
-            label{display:block;margin-bottom:.25em;font-weight:bold}
-            input[type=email],input[type=password],input[type=text]{
-              width:100%;padding:.5em;margin-bottom:1em;box-sizing:border-box;
-              border:1px solid #ccc;border-radius:4px;font-size:1em}
-            .pw-wrap{position:relative}
-            .pw-wrap input{padding-right:4.5em}
-            .pw-toggle{position:absolute;right:.5em;top:50%;transform:translateY(-50%);
-              background:none;border:none;cursor:pointer;color:#555;font-size:.85em;padding:.2em .4em}
-            .pw-toggle:hover{color:#000}
-            input[type=submit]{width:100%;padding:.75em;background:#0088cc;color:#fff;
-              border:none;border-radius:4px;font-size:1em;cursor:pointer}
-            input[type=submit]:hover{background:#006699}
-          </style></head>
-          <body>
-          <h2>Log in with Nexudus</h2>
-          <form method="post" action="#{CGI.escapeHTML(callback_path)}">
-            <input type="hidden" name="authenticity_token" value="#{CGI.escapeHTML(token)}">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" autocomplete="email" autofocus required>
-            <label for="password">Password</label>
-            <div class="pw-wrap">
-              <input type="password" id="password" name="password" autocomplete="current-password" required>
-              <button type="button" class="pw-toggle" id="pw-btn">Show</button>
-            </div>
-            <input type="submit" value="Log in">
-          </form>
-          <script#{nonce_attr}>
-            (function(){
-              var p=document.getElementById('password'),b=document.getElementById('pw-btn');
-              if(p&&b){b.addEventListener('click',function(){
-                p.type=p.type==='password'?'text':'password';
-                b.textContent=p.type==='password'?'Show':'Hide';
-              });}
-            })();
-          </script>
-          </body></html>
-        HTML
-      end
 
       def failure_html(message)
         <<~HTML
