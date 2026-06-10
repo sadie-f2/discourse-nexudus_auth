@@ -31,21 +31,57 @@ class NexudusMembershipProvider
     match
   end
 
+  # Verify a member's password via the Nexudus space token endpoint.
+  # Returns true if credentials are valid, false otherwise.
+  def self.verify_password(email, password)
+    space = ENV['NEXUDUS_SPACE'].to_s.strip
+    if space.empty?
+      Rails.logger.warn("[NexudusAuth] NEXUDUS_SPACE not set — password verification skipped")
+      return false
+    end
+
+    url = "https://#{space}.spaces.nexudus.com/api/token"
+    stdout, _stderr, _status = Open3.capture3(
+      'curl', '-s',
+      '-o', '/dev/null',
+      '-w', '%{http_code}',
+      '-X', 'POST',
+      '-H', 'Content-Type: application/x-www-form-urlencoded',
+      '--max-time', TIMEOUT.to_s,
+      '--data-urlencode', 'grant_type=password',
+      '--data-urlencode', "username=#{email}",
+      '--data-urlencode', "password=#{password}",
+      url
+    )
+    stdout.strip == '200'
+  rescue => e
+    Rails.logger.error("[NexudusAuth] verify_password failed: #{e.class}: #{e.message}")
+    false
+  end
+
   # Same lookup as find_member but returns a diagnostics hash (including
   # :member on success) for the diagnostic page.
-  def self.diagnose(email)
+  def self.diagnose(email, password = nil)
     out = {}
     token = ENV['NEXUDUS_BOOKING_TOKEN'].to_s.strip
-    out[:auth_type]       = token.empty? ? 'basic' : 'bearer'
-    out[:auth_configured] = (!token.empty? || !ENV['NEXUDUS_EMAIL'].to_s.empty?) ? 'yes' : 'NO — missing env vars'
-    out[:base_url]        = BASE_URL
+    out[:auth_type]         = token.empty? ? 'basic' : 'bearer'
+    out[:auth_configured]   = (!token.empty? || !ENV['NEXUDUS_EMAIL'].to_s.empty?) ? 'yes' : 'NO — missing env vars'
+    out[:nexudus_space]     = ENV['NEXUDUS_SPACE'].to_s.strip.empty? ? 'NOT SET' : ENV['NEXUDUS_SPACE'].to_s.strip
+    out[:base_url]          = BASE_URL
     out[:cache_size_before] = @@cache ? @@cache.length.to_s : 'empty'
 
     member = find_member(email)
 
     out[:cache_size]        = @@cache.length.to_s
     out[:email_match_found] = member ? 'YES' : 'no'
-    out[:member]            = member
+
+    if member && password
+      passed = verify_password(email, password)
+      out[:password_check] = passed ? 'passed' : 'FAILED'
+      member = nil unless passed
+    end
+
+    out[:member] = member
     out
   end
 

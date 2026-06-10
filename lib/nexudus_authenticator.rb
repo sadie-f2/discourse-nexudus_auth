@@ -16,10 +16,11 @@ module OmniAuth
       end
 
       def callback_phase
-        email = request.params['email'].to_s.strip.downcase
+        email    = request.params['email'].to_s.strip.downcase
+        password = request.params['password'].to_s
 
         if SiteSetting.nexudus_auth_diagnostics
-          diag   = ::NexudusMembershipProvider.diagnose(email)
+          diag   = ::NexudusMembershipProvider.diagnose(email, password)
           member = diag.delete(:member)
           unless member
             return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
@@ -29,7 +30,11 @@ module OmniAuth
           member = ::NexudusMembershipProvider.find_member(email)
           unless member
             return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
-                    [failure_html(email)]]
+                    [failure_html("No active Nexudus membership found for #{CGI.escapeHTML(email)}.")]]
+          end
+          unless ::NexudusMembershipProvider.verify_password(email, password)
+            return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
+                    [failure_html("Incorrect password.")]]
           end
         end
 
@@ -47,13 +52,13 @@ module OmniAuth
 
       private
 
-      def failure_html(email)
+      def failure_html(message)
         <<~HTML
           <!DOCTYPE html><html><head><title>Login failed</title>
           <style>body{font-family:sans-serif;padding:2em;max-width:600px}</style></head>
           <body>
           <h2>Login failed</h2>
-          <p>No active Nexudus membership found for <strong>#{CGI.escapeHTML(email)}</strong>.</p>
+          <p>#{message}</p>
           <p><a href="/auth/nexudus">&#8592; Try again</a></p>
           </body></html>
         HTML
