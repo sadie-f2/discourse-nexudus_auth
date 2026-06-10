@@ -1,3 +1,4 @@
+probe_auth.rb
 *.rbc
 capybara-*.html
 .rspec

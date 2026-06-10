@@ -18,12 +18,19 @@ module OmniAuth
       def callback_phase
         email = request.params['email'].to_s.strip.downcase
 
-        diag   = ::NexudusMembershipProvider.diagnose(email)
-        member = diag.delete(:member)
-
-        unless member
-          return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
-                  [diag_html(email, diag)]]
+        if SiteSetting.nexudus_auth_diagnostics
+          diag   = ::NexudusMembershipProvider.diagnose(email)
+          member = diag.delete(:member)
+          unless member
+            return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
+                    [diag_html(email, diag)]]
+          end
+        else
+          member = ::NexudusMembershipProvider.find_member(email)
+          unless member
+            return [200, { 'Content-Type' => 'text/html; charset=utf-8' },
+                    [failure_html(email)]]
+          end
         end
 
         env['omniauth.auth'] = OmniAuth::AuthHash.new(
@@ -39,6 +46,18 @@ module OmniAuth
       end
 
       private
+
+      def failure_html(email)
+        <<~HTML
+          <!DOCTYPE html><html><head><title>Login failed</title>
+          <style>body{font-family:sans-serif;padding:2em;max-width:600px}</style></head>
+          <body>
+          <h2>Login failed</h2>
+          <p>No active Nexudus membership found for <strong>#{CGI.escapeHTML(email)}</strong>.</p>
+          <p><a href="/auth/nexudus">&#8592; Try again</a></p>
+          </body></html>
+        HTML
+      end
 
       def diag_html(email, diag)
         rows = diag.map do |k, v|
@@ -85,21 +104,12 @@ class NexudusAuthenticator < Auth::Authenticator
     result.email       = info[:email]
     result.email_valid = true
 
-    # Check for existing Nexudus association
     account     = UserAssociatedAccount.find_by(provider_name: name,
                                                 provider_uid:  auth_token.uid)
     result.user = account&.user
-
-    # Nexudus membership confirmation is sufficient — auto-merge by email
-    # without requiring a second Discourse login. Existing username, display
-    # name, and privileges are untouched.
     result.user ||= User.find_by_email(info[:email])
-
-    # Only suggest Nexudus name when creating a brand-new account
     result.name = info[:name] if result.user.nil?
 
-    # Sync group now for existing users — after_connect_existing_user is not
-    # called when result.user is set directly
     add_to_nexudus_group(result.user) if result.user
 
     result

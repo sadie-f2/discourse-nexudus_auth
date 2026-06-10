@@ -1,72 +1,89 @@
 # frozen_string_literal: true
 require 'open3'
-require 'base64'
 require 'json'
+require 'set'
 require 'uri'
 
 class NexudusMembershipProvider
   BASE_URL       = ENV.fetch('NEXUDUS_BASE_URL', 'https://spaces.nexudus.com/api').freeze
   CONTRACTS_PATH = '/billing/coworkercontracts'
-  TIMEOUT        = 10
+  PAGE_SIZE      = 100
+  TIMEOUT        = 15
 
-  # Returns { email:, name:, nexudus_id: } if email matches an active member, nil otherwise.
-  def self.verify_and_fetch(email)
-    fetch_member(email)
-  rescue => e
-    Rails.logger.error("[NexudusAuth] #{e.class}: #{e.message}")
-    nil
+  @@cache = nil
+
+  # Returns { email:, name:, nexudus_id: } or nil.
+  # On a cache miss, refills once before giving up.
+  def self.find_member(email)
+    load_members! if @@cache.nil?
+    match = lookup(email)
+    unless match
+      load_members!
+      match = lookup(email)
+    end
+    match
   end
 
-  # Makes the same API call as verify_and_fetch but returns a diagnostics hash
-  # (including :member on success) instead of raising or returning bare nil.
+  # Same lookup as find_member but returns a diagnostics hash (including
+  # :member on success) for the diagnostic page.
   def self.diagnose(email)
     out = {}
     token = ENV['NEXUDUS_BOOKING_TOKEN'].to_s.strip
-    out[:auth_type]        = token.empty? ? 'basic' : 'bearer'
-    out[:auth_configured]  = (!token.empty? || !ENV['NEXUDUS_EMAIL'].to_s.empty?) ? 'yes' : 'NO — missing env vars'
-    out[:base_url]         = BASE_URL
+    out[:auth_type]       = token.empty? ? 'basic' : 'bearer'
+    out[:auth_configured] = (!token.empty? || !ENV['NEXUDUS_EMAIL'].to_s.empty?) ? 'yes' : 'NO — missing env vars'
+    out[:base_url]        = BASE_URL
+    out[:cache_size_before] = @@cache ? @@cache.length.to_s : 'empty'
 
-    begin
-      r = api_get(CONTRACTS_PATH, 'CoworkerContract_Active' => 'true', 'size' => '1000')
-      out[:contracts_status] = r.code
-      begin
-        data    = JSON.parse(r.body)
-        records = data['Records'] || []
-        out[:contracts_total_items]  = data['TotalItems'].to_s
-        out[:contracts_record_count] = records.length.to_s
-        match = records.find { |rec| rec['CoworkerEmail'].to_s.downcase == email.downcase }
-        out[:email_match_found] = match ? 'YES' : 'no'
-        out[:member] = match ? {
-          email:      match['CoworkerEmail'],
-          name:       match['CoworkerFullName'] || email.split('@').first,
-          nexudus_id: match['CoworkerId'].to_s
-        } : nil
-      rescue => e
-        out[:contracts_parse_error] = "#{e.class}: #{e.message}"
-        out[:contracts_raw_body]    = r.body.to_s[0, 300]
-      end
-    rescue => e
-      out[:contracts_error] = "#{e.class}: #{e.message}"
-    end
+    member = find_member(email)
 
+    out[:cache_size]        = @@cache.length.to_s
+    out[:email_match_found] = member ? 'YES' : 'no'
+    out[:member]            = member
     out
   end
 
   private
 
-  def self.fetch_member(email)
-    r = api_get(CONTRACTS_PATH, 'CoworkerContract_Active' => 'true', 'size' => '1000')
-    return nil unless r.code == '200'
-    records = JSON.parse(r.body)['Records'] || []
-    match = records.find { |rec| rec['CoworkerEmail'].to_s.downcase == email.downcase }
-    return nil unless match
-    {
-      email:      match['CoworkerEmail'],
-      name:       match['CoworkerFullName'] || email.split('@').first,
-      nexudus_id: match['CoworkerId'].to_s
-    }
+  def self.lookup(email)
+    (@@cache || []).find { |m| m[:email].downcase == email.downcase }
   end
-  private_class_method :fetch_member
+  private_class_method :lookup
+
+  def self.load_members!
+    records = []
+    page    = 1
+    loop do
+      r = api_get(CONTRACTS_PATH,
+                  'CoworkerContract_Active' => 'true',
+                  'size'                    => PAGE_SIZE.to_s,
+                  'page'                    => page.to_s)
+      break unless r.code == '200'
+      data = JSON.parse(r.body)
+      records.concat(data['Records'] || [])
+      break unless data['HasNextPage']
+      page += 1
+    end
+
+    seen    = Set.new
+    members = []
+    records.each do |rec|
+      id = rec['CoworkerId']
+      next if seen.include?(id)
+      seen.add(id)
+      members << {
+        email:      rec['CoworkerEmail'].to_s,
+        name:       rec['CoworkerFullName'].to_s,
+        nexudus_id: id.to_s
+      }
+    end
+
+    @@cache = members
+    Rails.logger.info("[NexudusAuth] member cache loaded: #{@@cache.length} members (#{page} page(s))")
+  rescue => e
+    Rails.logger.error("[NexudusAuth] load_members! failed: #{e.class}: #{e.message}")
+    @@cache ||= []
+  end
+  private_class_method :load_members!
 
   # Shell out to curl — Ruby's TLS fingerprint is blocked by CloudFront WAF,
   # curl's libssl is not.
@@ -83,7 +100,6 @@ class NexudusMembershipProvider
       uri.to_s
     )
 
-    # curl -w appends the status code on a new line after the body
     *body_lines, code = stdout.lines
     Response.new(code.to_s.strip, body_lines.join)
   end

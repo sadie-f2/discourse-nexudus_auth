@@ -6,3 +6,6 @@ plugins:
   nexudus_auth_group:
     default: "makerspace-members"
     type: string
+  nexudus_auth_diagnostics:
+    default: false
+    type: bool
