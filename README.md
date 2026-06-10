@@ -37,6 +37,28 @@ Ruby's `Net::HTTP` (via OpenSSL) presents a TLS ClientHello fingerprint that Nex
 
 **On Ubuntu 24 upgrade:** test `probe_auth.rb` against the Nexudus API before assuming curl is still needed. The Ruby + OpenSSL version change may produce a fingerprint that is no longer blocked — if so, the `Open3.capture3('curl', ...)` calls in `lib/nexudus_membership_provider.rb` can be replaced with clean `Net::HTTP`, removing the subprocess overhead and simplifying error handling.
 
+## Known limitations
+
+### Show/hide password toggle
+
+Members want to reveal their password while typing. Three attempts were made:
+
+- **Inline `onclick`** — blocked by Discourse's `script-src` CSP on OmniAuth popup responses
+- **`<script>` block with `addEventListener`** — also blocked (CSP applies to all inline scripts)
+- **CSP nonce via `action_dispatch.content_security_policy_nonce`** — nonce not populated at OmniAuth middleware depth; script rendered without nonce, still blocked
+
+Additionally, `autocomplete="current-password"` on a custom form field caused some browsers to autofill with the visual mask string (`••••••••`) rather than the real password, breaking `verify_password`. Reverted to `OmniAuth::Form` which avoids both issues.
+
+**Paths to a real fix (in order of effort):**
+
+1. **(4-6 hrs, medium risk)** Serve a small JS file from the plugin's `public/` directory at a predictable same-origin URL and reference it via `<script src="...">` — allowed by `script-src 'self'`. Needs investigation into Discourse's plugin static file serving.
+
+2. **(1-2 days)** Use a Discourse plugin outlet inside the login modal's Ember template to inject a show/hide toggle into the OmniAuth popup's password field.
+
+3. **(2-3 days)** Move the Nexudus email/password fields into Discourse's own login modal as an Ember component, POST to the OmniAuth callback via `fetch`, handle the result in JS. Eliminates the popup entirely and all CSP constraints with it.
+
+Option 3 is architecturally correct. All options carry risk without a staging server.
+
 ## Cache architecture
 
 Member data is cached in a class variable (`@@cache`) per Pitchfork worker process, with a 300-second TTL. The cache warms at boot via a background thread. Multiple concurrent requests during a cache-expired window are serialized by a `Mutex` (per-process).
