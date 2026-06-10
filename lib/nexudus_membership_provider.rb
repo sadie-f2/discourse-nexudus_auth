@@ -105,7 +105,23 @@ class NexudusMembershipProvider
                   'CoworkerContract_Active' => 'true',
                   'size'                    => PAGE_SIZE.to_s,
                   'page'                    => page.to_s)
-      break unless r.code == '200'
+      if r.code == '429'
+        retries ||= 0
+        if retries < 3
+          retries += 1
+          Rails.logger.warn("[NexudusAuth] rate limited on page #{page}, retry #{retries}/3 after 5s")
+          sleep 5
+          next
+        else
+          Rails.logger.warn("[NexudusAuth] rate limited on page #{page}, giving up after 3 retries")
+          break
+        end
+      end
+      retries = 0
+      unless r.code == '200'
+        Rails.logger.warn("[NexudusAuth] load_members! stopped at page #{page}: HTTP #{r.code}")
+        break
+      end
       data = JSON.parse(r.body)
       records.concat(data['Records'] || [])
       break unless data['HasNextPage']
