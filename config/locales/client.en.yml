@@ -3,3 +3,5 @@ en:
     nexudus:
       name: Nexudus
       title: Log in with Nexudus
+  nexudus_auth:
+    admin_title: "Nexudus Auth"

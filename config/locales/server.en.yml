@@ -1,0 +1,5 @@
+en:
+  site_settings:
+    nexudus_auth_enabled: "Enable Nexudus authentication"
+    nexudus_auth_group: "Nexudus member group name"
+    nexudus_auth_diagnostics: "Show diagnostics on failed Nexudus login"
