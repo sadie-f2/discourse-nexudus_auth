@@ -46,6 +46,7 @@ module OmniAuth
       private
 
       def login_html
+        token = request.env['rack.session']['omniauth.authenticity_token'].to_s
         <<~HTML
           <!DOCTYPE html><html><head><title>Log in with Nexudus</title>
           <style>
@@ -66,16 +67,25 @@ module OmniAuth
           <body>
           <h2>Log in with Nexudus</h2>
           <form method="post" action="#{CGI.escapeHTML(callback_path)}">
+            <input type="hidden" name="authenticity_token" value="#{CGI.escapeHTML(token)}">
             <label for="email">Email</label>
             <input type="email" id="email" name="email" autocomplete="email" autofocus required>
             <label for="password">Password</label>
             <div class="pw-wrap">
               <input type="password" id="password" name="password" autocomplete="current-password" required>
-              <button type="button" class="pw-toggle" id="pw-btn"
-                onclick="var p=document.getElementById('password');var b=document.getElementById('pw-btn');if(p.type==='password'){p.type='text';b.textContent='Hide'}else{p.type='password';b.textContent='Show'}">Show</button>
+              <button type="button" class="pw-toggle" id="pw-btn">Show</button>
             </div>
             <input type="submit" value="Log in">
           </form>
+          <script>
+            (function(){
+              var p=document.getElementById('password'),b=document.getElementById('pw-btn');
+              if(p&&b){b.addEventListener('click',function(){
+                p.type=p.type==='password'?'text':'password';
+                b.textContent=p.type==='password'?'Show':'Hide';
+              });}
+            })();
+          </script>
           </body></html>
         HTML
       end

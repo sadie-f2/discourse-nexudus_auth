@@ -2,12 +2,12 @@
 
 # name: discourse-nexudus_auth
 # about: Authenticates Discourse users against the Nexudus coworking REST API
-# version: 0.2.1
+# version: 0.2.2
 # authors: Sadie Forbes
 # url: https://github.com/sadie-f2/discourse-nexudus_auth
 # contact_emails: sadieforbes@proton.me
 
-NEXUDUS_AUTH_VERSION  = '0.2.1'
+NEXUDUS_AUTH_VERSION  = '0.2.2'
 NEXUDUS_AUTH_GIT_HASH = `git -C #{File.dirname(__FILE__)} rev-parse --short HEAD 2>/dev/null`.strip.freeze
 
 require_relative 'lib/nexudus_membership_provider'
@@ -22,9 +22,7 @@ auth_provider(
 
 after_initialize do
   Rails.logger.info("[NexudusAuth] loaded v#{NEXUDUS_AUTH_VERSION} (#{NEXUDUS_AUTH_GIT_HASH})")
-  Thread.new do
-    Rails.application.executor.wrap { NexudusMembershipProvider.preload! }
-  end
+  NexudusMembershipProvider.preload!
 
   group_name = SiteSetting.nexudus_auth_group.to_s.strip
   Group.find_or_create_by(name: group_name) do |g|
