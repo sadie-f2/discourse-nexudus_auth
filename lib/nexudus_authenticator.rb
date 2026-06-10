@@ -47,6 +47,8 @@ module OmniAuth
 
       def login_html
         token = request.env['rack.session']['omniauth.authenticity_token'].to_s
+        nonce = request.env['action_dispatch.content_security_policy_nonce'].to_s
+        nonce_attr = nonce.empty? ? '' : " nonce=\"#{CGI.escapeHTML(nonce)}\""
         <<~HTML
           <!DOCTYPE html><html><head><title>Log in with Nexudus</title>
           <style>
@@ -77,7 +79,7 @@ module OmniAuth
             </div>
             <input type="submit" value="Log in">
           </form>
-          <script>
+          <script#{nonce_attr}>
             (function(){
               var p=document.getElementById('password'),b=document.getElementById('pw-btn');
               if(p&&b){b.addEventListener('click',function(){
