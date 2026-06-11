@@ -63,6 +63,21 @@ The form uses a custom `request_phase` (not `OmniAuth::Form`) with an inline `<s
 
 3. **(2-3 days)** Move the Nexudus email/password fields into Discourse's own login modal as an Ember component, POST to the OmniAuth callback via `fetch`, handle the result in JS. Eliminates the popup entirely and all CSP constraints with it. Architecturally correct long-term target.
 
+## Architectural retrospective: OAuth2 provider
+
+In hindsight, the cleanest approach would have been to run a standalone OAuth2 authorization server backed by the Nexudus API, rather than embedding auth logic inside a Discourse plugin.
+
+This plugin already contains the two hard pieces of that server:
+
+- **Identity**: paginated member cache keyed by email, sourced from the Nexudus contracts API
+- **Credential verification**: `verify_password` against the Nexudus token endpoint, including the `curl` workaround for the TLS fingerprint block
+
+Wrapping those in a standard OAuth2 authorization code flow would produce a first-party **"Log in with Artisans Asylum"** provider. Any internal tool — Discourse, door access, equipment booking, whatever comes next — could authenticate against it without independently reimplementing the Nexudus API, the pagination, the rate-limit handling, or the TLS workaround.
+
+The current implementation also spans two languages (Ruby for the Discourse plugin, Python for the reporting scripts in the companion repo), with duplicated Nexudus API client logic in each. A shared OAuth2 provider would have been the single point of integration.
+
+This is a meaningful refactor, not a quick fix. Noted here as the long-term target if the makerspace adds more tools that need Nexudus-backed auth.
+
 ## Cache architecture
 
 Member data is cached in a class variable (`@@cache`) per Pitchfork worker process, with a 300-second TTL. The cache warms at boot via a background thread. Multiple concurrent requests during a cache-expired window are serialized by a `Mutex` (per-process).
