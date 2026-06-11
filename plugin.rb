@@ -2,16 +2,18 @@
 
 # name: discourse-nexudus_auth
 # about: Authenticates Discourse users against the Nexudus coworking REST API
-# version: 0.2.4
+# version: 0.2.5
 # authors: Sadie Forbes
 # url: https://github.com/sadie-f2/discourse-nexudus_auth
 # contact_emails: sadieforbes@proton.me
 
-NEXUDUS_AUTH_VERSION  = '0.2.4'
+NEXUDUS_AUTH_VERSION  = '0.2.5'
 NEXUDUS_AUTH_GIT_HASH = `git -C #{File.dirname(__FILE__)} rev-parse --short HEAD 2>/dev/null`.strip.freeze
 
 require_relative 'lib/nexudus_membership_provider'
 require_relative 'lib/nexudus_authenticator'
+
+extend_content_security_policy(script_src: [NEXUDUS_TOGGLE_JS_CSP_HASH])
 
 enabled_site_setting :nexudus_auth_enabled
 

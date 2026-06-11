@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 require 'omniauth'
 require 'cgi'
+require 'digest'
+require 'base64'
+
+NEXUDUS_TOGGLE_JS = "document.getElementById('pw-btn').addEventListener('click',function(){var p=document.getElementById('password');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'Show':'Hide';});"
+NEXUDUS_TOGGLE_JS_CSP_HASH = "'sha256-#{Base64.strict_encode64(Digest::SHA256.digest(NEXUDUS_TOGGLE_JS))}'".freeze
 
 module OmniAuth
   module Strategies
@@ -9,10 +14,7 @@ module OmniAuth
       option :name, 'nexudus'
 
       def request_phase
-        form = OmniAuth::Form.new(title: 'Log in with Nexudus', url: callback_path)
-        form.text_field('Email', 'email')
-        form.password_field('Password', 'password')
-        form.to_response
+        [200, { 'Content-Type' => 'text/html; charset=utf-8' }, [login_html]]
       end
 
       def callback_phase
@@ -47,6 +49,34 @@ module OmniAuth
       end
 
       private
+
+      def login_html
+        <<~HTML
+          <!DOCTYPE html><html><head><title>Log in with Nexudus</title>
+          <style>
+          body{font-family:sans-serif;padding:2em;max-width:400px;margin:0 auto}
+          label{display:block;margin-top:1em}
+          input[type=text],input[type=password]{width:100%;padding:6px 8px;box-sizing:border-box;margin-top:4px}
+          .pw-wrap{position:relative;display:block}
+          .pw-wrap input{padding-right:3.5em}
+          #pw-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#555;font-size:0.8em;padding:2px 4px}
+          button[type=submit]{margin-top:1.5em;padding:8px 20px;cursor:pointer;font-size:1em}
+          </style></head>
+          <body>
+          <h1>Log in with Nexudus</h1>
+          <form method='post' action='#{callback_path}'>
+          <label>Email:<br><input type='text' id='email' name='email'></label>
+          <label>Password:<br>
+          <span class='pw-wrap'>
+          <input type='password' id='password' name='password'>
+          <button type='button' id='pw-btn'>Show</button>
+          </span></label>
+          <button type='submit'>Connect</button>
+          </form>
+          <script>#{NEXUDUS_TOGGLE_JS}</script>
+          </body></html>
+        HTML
+      end
 
       def failure_html(message)
         <<~HTML

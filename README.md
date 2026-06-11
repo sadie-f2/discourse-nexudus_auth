@@ -41,23 +41,27 @@ Ruby's `Net::HTTP` (via OpenSSL) presents a TLS ClientHello fingerprint that Nex
 
 ### Show/hide password toggle
 
-Members want to reveal their password while typing. Three attempts were made:
+The form uses a custom `request_phase` (not `OmniAuth::Form`) with an inline `<script>` toggle.
 
-- **Inline `onclick`** — blocked by Discourse's `script-src` CSP on OmniAuth popup responses
-- **`<script>` block with `addEventListener`** — also blocked (CSP applies to all inline scripts)
-- **CSP nonce via `action_dispatch.content_security_policy_nonce`** — nonce not populated at OmniAuth middleware depth; script rendered without nonce, still blocked
+**Why not a `<script src="...">` file?** Discourse's CSP uses `strict-dynamic`, not `'self'` — same-origin script URLs are still blocked without a nonce. Nonces aren't available at OmniAuth middleware depth (`action_dispatch.content_security_policy_nonce` is not populated there).
 
-Additionally, `autocomplete="current-password"` on a custom form field caused some browsers to autofill with the visual mask string (`••••••••`) rather than the real password, breaking `verify_password`. Reverted to `OmniAuth::Form` which avoids both issues.
+**Current approach:** the toggle script is an inline `<script>` block. Its SHA-256 hash is computed at load time from the constant `NEXUDUS_TOGGLE_JS` and registered with Discourse's CSP via `extend_content_security_policy(script_src: [NEXUDUS_TOGGLE_JS_CSP_HASH])` in `plugin.rb`. CSP allows an inline script whose content matches a whitelisted hash without needing a nonce. **If the script content ever changes, the constant and the hash update together automatically** — no manual hash management.
 
-**Paths to a real fix (in order of effort):**
+**Earlier failed approaches (for reference):**
+- Inline `onclick` attribute — blocked by CSP
+- `<script>` block with `addEventListener` — blocked by CSP (no hash registered)
+- Nonce via `action_dispatch.content_security_policy_nonce` — nonce not populated at OmniAuth depth
+- `autocomplete="current-password"` on custom form — caused browsers to autofill with the visual mask string (`••••••••`), breaking `verify_password`; current form omits `autocomplete` on the password field
 
-1. **(4-6 hrs, medium risk)** Serve a small JS file from the plugin's `public/` directory at a predictable same-origin URL and reference it via `<script src="...">` — allowed by `script-src 'self'`. Needs investigation into Discourse's plugin static file serving.
+**Upgrade note:** if Discourse ever changes how `extend_content_security_policy` is processed or stops applying the global CSP to OmniAuth middleware responses, the toggle will silently stop working (no crash — the script is just ignored). The fix would be to adopt plan 3 below.
+
+**Architectural alternatives (in order of effort):**
+
+1. **(done)** SHA-256 hash of inline script via `extend_content_security_policy` — current implementation.
 
 2. **(1-2 days)** Use a Discourse plugin outlet inside the login modal's Ember template to inject a show/hide toggle into the OmniAuth popup's password field.
 
-3. **(2-3 days)** Move the Nexudus email/password fields into Discourse's own login modal as an Ember component, POST to the OmniAuth callback via `fetch`, handle the result in JS. Eliminates the popup entirely and all CSP constraints with it.
-
-Option 3 is architecturally correct. All options carry risk without a staging server.
+3. **(2-3 days)** Move the Nexudus email/password fields into Discourse's own login modal as an Ember component, POST to the OmniAuth callback via `fetch`, handle the result in JS. Eliminates the popup entirely and all CSP constraints with it. Architecturally correct long-term target.
 
 ## Cache architecture
 
